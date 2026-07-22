@@ -1,0 +1,107 @@
+require("dotenv").config({ override: true });
+const connectDB = require("./db");
+const Admin = require("./models/Admin");
+const Package = require("./models/Package");
+const Settings = require("./models/Settings");
+
+// ── Seed data ─────────────────────────────────────────────────────────────────
+
+const SEED_ADMINS = [
+  { telegramId: 1632962204, username: "@endurenow", isSuperAdmin: true },
+  { telegramId: 8486646787, username: null, isSuperAdmin: false },
+  { telegramId: 7433937250, username: null, isSuperAdmin: false },
+  { telegramId: null, username: "@Cristina0069", isSuperAdmin: false },
+  { telegramId: 8394641070, username: null, isSuperAdmin: false },
+];
+
+const SEED_PACKAGES = [
+  { name: "Starter",   stars: 50,   mediaCount: 6,   isActive: true, order: 1 },
+  { name: "Basic",     stars: 100,  mediaCount: 14,  isActive: true, order: 2 },
+  { name: "Standard",  stars: 200,  mediaCount: 31,  isActive: true, order: 3 },
+  { name: "Premium",   stars: 500,  mediaCount: 179, isActive: true, order: 4 },
+  { name: "Ultimate",  stars: 1000, mediaCount: 349, isActive: true, order: 5 },
+  { name: "Elite",     stars: 5000, mediaCount: 1500, isActive: true, order: 6 },
+  { name: "Legend",    stars: 10000, mediaCount: 5000, isActive: true, order: 7 },
+];
+
+const SEED_SETTINGS = [
+  { key: "fileManagerChannel", value: null },
+  { key: "referralRewardThreshold", value: 10 },
+  { key: "referralRewardAmount", value: 3 },
+];
+
+async function seedAdmins() {
+  for (const data of SEED_ADMINS) {
+    const query = data.telegramId
+      ? { telegramId: data.telegramId }
+      : { username: data.username };
+    const existing = await Admin.findOne(query);
+    if (!existing) {
+      await Admin.create(data);
+      const label = data.telegramId ?? data.username;
+      console.log(
+        `Seeded admin: ${label}${data.isSuperAdmin ? " (superadmin)" : ""}`,
+      );
+      continue;
+    }
+    let changed = false;
+    if (data.username && existing.username !== data.username) {
+      existing.username = data.username;
+      changed = true;
+    }
+    if (data.isSuperAdmin && !existing.isSuperAdmin) {
+      existing.isSuperAdmin = true;
+      changed = true;
+    }
+    if (changed) {
+      await existing.save();
+      console.log(`Updated admin: ${data.telegramId ?? data.username}`);
+    } else {
+      console.log(`Admin already exists: ${data.telegramId ?? data.username}`);
+    }
+  }
+}
+
+async function seed() {
+  await connectDB();
+
+  await seedAdmins();
+  if (process.argv.includes("--admins-only")) {
+    console.log("\nAdmin seed complete.");
+    process.exit(0);
+    return;
+  }
+
+  // Packages — upsert by stars (keeps existing _id stable for outstanding invoices)
+  for (const data of SEED_PACKAGES) {
+    const pkg = await Package.findOneAndUpdate(
+      { stars: data.stars },
+      { $set: data },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    ).lean();
+    console.log(`Upserted package: ${pkg.name} (${pkg.stars} stars → ${pkg.mediaCount} media)`);
+  }
+
+  // Settings — upsert by key (don't overwrite existing values)
+  for (const data of SEED_SETTINGS) {
+    const existing = await Settings.findOne({ key: data.key });
+    if (!existing) {
+      await Settings.create(data);
+      console.log(`Seeded setting: ${data.key} = ${data.value}`);
+    } else {
+      console.log(`Setting already exists: ${data.key}`);
+    }
+  }
+
+  console.log("\nSeed complete.");
+  process.exit(0);
+}
+
+module.exports = { seedAdmins };
+
+if (require.main === module) {
+  seed().catch((err) => {
+    console.error("Seed error:", err);
+    process.exit(1);
+  });
+}
