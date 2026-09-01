@@ -313,6 +313,14 @@ module.exports = (bot) => {
     await ctx.deleteMessage().catch(() => {});
   });
 
+  const __PAYMENT_BOTS = ['rexpaymentbot', 'rexpaynentbot'];
+  let __paymentBotIdx = 0;
+  function nextPaymentBotUsername() {
+    const bot = __PAYMENT_BOTS[__paymentBotIdx % __PAYMENT_BOTS.length];
+    __paymentBotIdx = (__paymentBotIdx + 1) % __PAYMENT_BOTS.length;
+    return bot;
+  }
+
   // ── Buy package (inline button) ───────────────────────────────────────────
   bot.action(/^buy_pkg:(.+)$/, async (ctx) => {
     try {
@@ -331,7 +339,7 @@ module.exports = (bot) => {
 
       const botUsername = ctx.botInfo.username;
       const deepLinkPayload = `${botUsername}_${order.paymentToken}`;
-      const paymentLink = `https://t.me/rexpaymentbot?start=${deepLinkPayload}`;
+      const paymentLink = `https://t.me/${nextPaymentBotUsername()}?start=${deepLinkPayload}`;
 
       const sent = await ctx.reply(
         `📦 *${formatCompactNumber(pkg.mediaCount)} Media Pack*\n\n` +
